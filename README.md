@@ -14,6 +14,8 @@ deserialization…), explains the risk in plain English with a concrete
 **realtime alert** to your team — with [DNotifier](https://www.dnotifier.com)
 powering the AI pipeline, the RAG knowledge base, and the messenger.
 
+> ## 🌐 **[Live demo — click & it runs!](https://repoguard-ai-mmpfx9bdwp9tlsfd87x3be.streamlit.app)**
+
 ![AI patch view](docs/screenshots/patch-view.png)
 ![Realtime notify](docs/screenshots/notify-success.png)
 
@@ -35,7 +37,7 @@ Plus:
 ## 🚀 Quickstart (60 seconds)
 
 ```bash
-git clone https://github.com/<you>/repoguard-ai.git
+git clone https://github.com/mabdullahch90-spec/repoguard-ai.git
 cd repoguard-ai
 python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
