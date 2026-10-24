@@ -1,0 +1,18 @@
+# --- UI ---
+streamlit>=1.40.0
+
+# --- Data validation ---
+pydantic>=2.9.0
+pandas>=2.0.0
+
+# --- Env / secrets management ---
+python-dotenv>=1.0.1
+
+# --- DNotifier SDK (realtime notify + AI pipeline + RAG knowledge base) ---
+dnotifier>=1.0.2
+
+# --- Optional fallback AI engine (OpenAI / Ollama / LM Studio compatible) ---
+openai>=1.54.0
+
+# --- Dev / test ---
+pytest>=8.0.0
