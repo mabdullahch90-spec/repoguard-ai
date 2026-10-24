@@ -17,6 +17,32 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
 
 
+def _load_streamlit_secrets() -> None:
+    """Merge `.streamlit/secrets.toml` into the process environment.
+
+    Streamlit Community Cloud injects deployment secrets as a TOML file
+    instead of a `.env`. Values are only *defaulted* into the environment
+    so a real environment variable (or .env entry) always wins.
+    Best-effort: any error (no file, old Python without tomllib) is ignored
+    and the app simply falls back to offline mode.
+    """
+    try:
+        import tomllib  # Python 3.11+
+
+        secrets_path = Path(__file__).resolve().parent.parent / ".streamlit" / "secrets.toml"
+        if not secrets_path.is_file():
+            return
+        data = tomllib.loads(secrets_path.read_text(encoding="utf-8"))
+        for key, value in data.items():
+            if isinstance(value, (str, int, float, bool)):
+                os.environ.setdefault(str(key), str(value))
+    except Exception:  # noqa: BLE001 — configuration must never crash the app
+        pass
+
+
+_load_streamlit_secrets()
+
+
 def _int_env(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
