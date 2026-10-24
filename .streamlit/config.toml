@@ -1,0 +1,15 @@
+# RepoGuard AI — global Streamlit theme (committed on purpose: NO secrets here).
+# Real credentials live in .env (local) / .streamlit/secrets.toml (cloud, gitignored).
+[theme]
+base = "dark"
+primaryColor = "#00ffa8"
+backgroundColor = "#070b14"
+secondaryBackgroundColor = "#0d1526"
+textColor = "#e6edf3"
+linkColor = "#00d0ff"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false

@@ -29,6 +29,8 @@ powering the AI pipeline, the RAG knowledge base, and the messenger.
 
 Plus:
 
+- 🖤 **Dark cyber UI** — animated gradient hero, glass KPI cards, neon severity
+  bars, terminal-style editor, branded footer (see `repoguard/theme.py`)
 - 🎨 **Dashboard**: security score, severity chart, colour-coded findings table (worst first)
 - 🤖 **AI Security Brief**: one-screen `RISK OVERALL: n/10` + top priorities + quick wins
 - 🧠 **3 AI engines**: DNotifier AI (RAG) → any OpenAI-compatible endpoint → offline rule hints
@@ -48,7 +50,7 @@ streamlit run app.py
 
 Then in the browser:
 
-1. Upload `samples/vulnerable_app.py` → **🚀 Scan** → see score 0/100 + 8 findings
+1. Click **🧪 Load demo sample** → **🚀 Scan** → see score 0/100 + 8 findings
 2. Expand a finding → **🩹 Generate secure patch** → explanation, attack scenario, diff, verify steps
 3. **🤖 Generate executive summary** → prioritised AI brief for the whole scan
 4. **🔔 Notify team via DNotifier** → realtime push with a message ID
@@ -71,7 +73,8 @@ repoguard-ai/
 │   ├── scanner.py          # The Scout — static rule engine
 │   ├── patcher.py          # The Auto-Patch Engineer — pluggable AI engines
 │   ├── notifier.py         # DNotifier bridge (notify + RAG + brief)
-│   └── utils.py            # async bridge, LLM output parsing
+│   ├── utils.py            # async bridge, LLM output parsing
+│   └── theme.py            # visual layer — dark neon theme, glass cards, KPIs
 ├── samples/
 │   └── vulnerable_app.py   # demo file with 8 planted vulnerabilities
 ├── docs/screenshots/       # images used in this README

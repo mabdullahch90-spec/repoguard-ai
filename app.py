@@ -5,6 +5,8 @@ Run:  streamlit run app.py
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -13,6 +15,7 @@ from repoguard.models import Finding, Severity
 from repoguard.notifier import DNotifierBridge
 from repoguard.patcher import get_engine
 from repoguard.scanner import scan
+from repoguard import theme
 
 # ---------------------------------------------------------------------------
 # Page setup
@@ -47,25 +50,8 @@ SEVERITY_HEX = {
 }
 
 # Tasteful hero banner + metric polish
-st.markdown(
-    """
-    <style>
-    .hero {
-        background: linear-gradient(135deg, #0f2027 0%, #203a43 55%, #2c5364 100%);
-        padding: 20px 26px; border-radius: 14px; margin-bottom: 6px;
-        border: 1px solid #31465a;
-    }
-    .hero h1 { color: #ffffff; margin: 0; font-size: 1.7rem; letter-spacing: .3px; }
-    .hero p  { color: #cfe3f0; margin: 6px 0 0 0; font-size: .95rem; }
-    div[data-testid="stMetricValue"] { font-size: 1.7rem; }
-    </style>
-    <div class="hero">
-        <h1>🛡️ RepoGuard AI</h1>
-        <p>Autonomous Vulnerability &amp; Patch Agent — The Scout, The Explainer, The Messenger.</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+theme.inject()   # global cyber-security stylesheet
+theme.hero()     # animated gradient title + capability chips
 
 
 @st.cache_resource
@@ -118,7 +104,7 @@ with st.sidebar:
     )
     st.caption(f"Receiver: {settings.dnotifier_receiver_id}")
 
-    if st.button("📚 Seed OWASP knowledge base", use_container_width=True):
+    if st.button("📚 Seed OWASP knowledge base", width="stretch"):
         status = get_bridge().seed_knowledge_base()
         (st.success if status.ok else st.warning)(status.detail)
 
@@ -126,27 +112,48 @@ with st.sidebar:
 # Main area
 # ---------------------------------------------------------------------------
 
+# Landing explainer — only before the first scan (keeps results clean)
+if not st.session_state.get("scan_result"):
+    theme.how_it_works()
+
 st.markdown(
-    "**Paste a Python/JS snippet or upload a file.** The Scout finds "
-    "vulnerabilities; the Auto-Patch Engineer proposes a secure fix "
-    "(human review required before applying)."
+    """
+<div class="rg-strip">
+  📋 <b>Paste a Python/JS snippet or upload a file.</b> The Scout finds
+  vulnerabilities; the Auto-Patch Engineer proposes a secure fix
+  <i>(human review required before applying)</i>.
+</div>
+""",
+    unsafe_allow_html=True,
 )
 
 uploaded = st.file_uploader("Upload .py / .js file", type=["py", "js", "txt"])
-default_code = ""
-if uploaded is not None:
+if uploaded is not None and st.session_state.get("_uploaded_id") != uploaded.file_id:
     # OWASP: decode as text with replacement — never execute uploads.
-    default_code = uploaded.getvalue().decode("utf-8", errors="replace")
+    # A newly uploaded file wins once; later edits in the box are preserved.
+    st.session_state["_uploaded_id"] = uploaded.file_id
+    st.session_state["code_input"] = uploaded.getvalue().decode(
+        "utf-8", errors="replace"
+    )
+
+# One-click demo for judges / first-time visitors: 8 planted vulnerabilities.
+if st.button(
+    "🧪 Load demo sample",
+    help="Preloads samples/vulnerable_app.py — 8 planted vulnerabilities",
+):
+    st.session_state["code_input"] = (
+        Path(__file__).resolve().parent / "samples" / "vulnerable_app.py"
+    ).read_text(encoding="utf-8", errors="replace")
 
 code = st.text_area(
     "Source code",
-    value=default_code,
+    key="code_input",
     height=320,
     placeholder="Paste code here…",
     label_visibility="collapsed",
 )
 
-if st.button("🚀 Scan", type="primary"):
+if st.button("🚀 Scan", type="primary", width="stretch"):
     if not code.strip():
         st.warning("Nothing to scan — paste or upload some code first.")
     else:
@@ -158,6 +165,8 @@ if st.button("🚀 Scan", type="primary"):
         for key in list(st.session_state.keys()):
             if key.startswith(("patch_result_", "ai_brief")):
                 del st.session_state[key]
+        # Fresh run: intro cards disappear and results render in one clean pass.
+        st.rerun()
 
 # ---- Results ----------------------------------------------------------
 result = st.session_state.get("scan_result")
@@ -166,15 +175,14 @@ if result:
     for f in result.findings:
         counts[f.severity.value] += 1
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Security score", f"{result.security_score}/100")
-    c2.metric("Findings", len(result.findings))
-    c3.metric(
-        "Critical / High",
-        f"{counts['CRITICAL']} / {counts['HIGH']}",
+    theme.kpi_row(
+        score=result.security_score,
+        total=len(result.findings),
+        critical=counts["CRITICAL"],
+        high=counts["HIGH"],
+        language=result.language.value,
+        lines=result.total_lines,
     )
-    c4.metric("Language", result.language.value.upper())
-    st.caption(f"Lines scanned: {result.total_lines}")
     if result.truncated:
         st.warning("Input was truncated to the configured size guardrail.")
 
@@ -190,13 +198,7 @@ if result:
         col_chart, col_table = st.columns([1, 2])
 
         with col_chart:
-            chart_df = pd.DataFrame(
-                {
-                    "Severity": list(counts.keys()),
-                    "Count": list(counts.values()),
-                }
-            ).set_index("Severity")
-            st.bar_chart(chart_df, height=260)
+            theme.severity_bars(counts)
 
         with col_table:
             table_df = pd.DataFrame(
@@ -213,7 +215,7 @@ if result:
             )
             st.dataframe(
                 _severity_table(table_df),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=260,
             )
@@ -227,6 +229,12 @@ if result:
                 f"{color} {finding.severity.value} · {finding.rule_id} — "
                 f"{finding.title} (line {finding.line_no})"
             ):
+                theme.pills(
+                    finding.severity.value,
+                    finding.owasp,
+                    finding.line_no,
+                    finding.rule_id,
+                )
                 st.markdown(f"**Why dangerous:** {finding.description}")
                 st.markdown(f"**OWASP:** {finding.owasp}")
                 st.code(finding.code, language="python")
@@ -288,3 +296,6 @@ if result:
     if st.button("🔔 Notify team via DNotifier"):
         status = get_bridge().notify_scan(result)
         (st.success if status.ok else st.warning)(status.detail)
+
+# Branded footer (default Streamlit footer is hidden via CSS)
+theme.footer()
