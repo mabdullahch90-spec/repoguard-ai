@@ -125,182 +125,166 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Main area
 # ---------------------------------------------------------------------------
-tab_scan, tab_ask = st.tabs(["🔍 Scan & Patch", "💬 Ask DNotifier AI"])
 
-with tab_scan:
-    st.markdown(
-        "**Paste a Python/JS snippet or upload a file.** The Scout finds "
-        "vulnerabilities; the Auto-Patch Engineer proposes a secure fix "
-        "(human review required before applying)."
+st.markdown(
+    "**Paste a Python/JS snippet or upload a file.** The Scout finds "
+    "vulnerabilities; the Auto-Patch Engineer proposes a secure fix "
+    "(human review required before applying)."
+)
+
+uploaded = st.file_uploader("Upload .py / .js file", type=["py", "js", "txt"])
+default_code = ""
+if uploaded is not None:
+    # OWASP: decode as text with replacement — never execute uploads.
+    default_code = uploaded.getvalue().decode("utf-8", errors="replace")
+
+code = st.text_area(
+    "Source code",
+    value=default_code,
+    height=320,
+    placeholder="Paste code here…",
+    label_visibility="collapsed",
+)
+
+if st.button("🚀 Scan", type="primary"):
+    if not code.strip():
+        st.warning("Nothing to scan — paste or upload some code first.")
+    else:
+        with st.spinner("Scanning…"):
+            result = scan(code)
+        st.session_state["scan_result"] = result
+        st.session_state["source_code"] = code
+        # A new scan invalidates any stale patch/brief from the old one.
+        for key in list(st.session_state.keys()):
+            if key.startswith(("patch_result_", "ai_brief")):
+                del st.session_state[key]
+
+# ---- Results ----------------------------------------------------------
+result = st.session_state.get("scan_result")
+if result:
+    counts = {sev.value: 0 for sev in Severity}
+    for f in result.findings:
+        counts[f.severity.value] += 1
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Security score", f"{result.security_score}/100")
+    c2.metric("Findings", len(result.findings))
+    c3.metric(
+        "Critical / High",
+        f"{counts['CRITICAL']} / {counts['HIGH']}",
     )
+    c4.metric("Language", result.language.value.upper())
+    st.caption(f"Lines scanned: {result.total_lines}")
+    if result.truncated:
+        st.warning("Input was truncated to the configured size guardrail.")
 
-    uploaded = st.file_uploader("Upload .py / .js file", type=["py", "js", "txt"])
-    default_code = ""
-    if uploaded is not None:
-        # OWASP: decode as text with replacement — never execute uploads.
-        default_code = uploaded.getvalue().decode("utf-8", errors="replace")
-
-    code = st.text_area(
-        "Source code",
-        value=default_code,
-        height=320,
-        placeholder="Paste code here…",
-        label_visibility="collapsed",
-    )
-
-    if st.button("🚀 Scan", type="primary"):
-        if not code.strip():
-            st.warning("Nothing to scan — paste or upload some code first.")
-        else:
-            with st.spinner("Scanning…"):
-                result = scan(code)
-            st.session_state["scan_result"] = result
-            st.session_state["source_code"] = code
-            # A new scan invalidates any stale patch/brief from the old one.
-            for key in list(st.session_state.keys()):
-                if key.startswith(("patch_result_", "ai_brief")):
-                    del st.session_state[key]
-
-    # ---- Results ----------------------------------------------------------
-    result = st.session_state.get("scan_result")
-    if result:
-        counts = {sev.value: 0 for sev in Severity}
-        for f in result.findings:
-            counts[f.severity.value] += 1
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Security score", f"{result.security_score}/100")
-        c2.metric("Findings", len(result.findings))
-        c3.metric(
-            "Critical / High",
-            f"{counts['CRITICAL']} / {counts['HIGH']}",
-        )
-        c4.metric("Language", result.language.value.upper())
-        st.caption(f"Lines scanned: {result.total_lines}")
-        if result.truncated:
-            st.warning("Input was truncated to the configured size guardrail.")
-
-        if not result.findings:
-            st.success("✅ No known vulnerability patterns detected in this snippet.")
-            st.caption(
-                "Note: static heuristics cannot prove absence of bugs — treat a "
-                "clean scan as 'no obvious issues', not a guarantee."
-            )
-        else:
-            # ---- Severity chart + findings table ---------------------------
-            st.subheader("Overview")
-            col_chart, col_table = st.columns([1, 2])
-
-            with col_chart:
-                chart_df = pd.DataFrame(
-                    {
-                        "Severity": list(counts.keys()),
-                        "Count": list(counts.values()),
-                    }
-                ).set_index("Severity")
-                st.bar_chart(chart_df, height=260)
-
-            with col_table:
-                table_df = pd.DataFrame(
-                    [
-                        {
-                            "Severity": f.severity.value,
-                            "Rule": f.rule_id,
-                            "Title": f.title,
-                            "Line": f.line_no,
-                            "OWASP": f.owasp,
-                        }
-                        for f in result.findings
-                    ]
-                )
-                st.dataframe(
-                    _severity_table(table_df),
-                    use_container_width=True,
-                    hide_index=True,
-                    height=260,
-                )
-
-            # ---- Per-finding cards (worst first) ---------------------------
-            st.subheader("Findings")
-            ordered = sorted(result.findings, key=lambda f: SEVERITY_RANK[f.severity])
-            for i, finding in enumerate(ordered):
-                color = SEVERITY_COLORS[finding.severity]
-                with st.expander(
-                    f"{color} {finding.severity.value} · {finding.rule_id} — "
-                    f"{finding.title} (line {finding.line_no})"
-                ):
-                    st.markdown(f"**Why dangerous:** {finding.description}")
-                    st.markdown(f"**OWASP:** {finding.owasp}")
-                    st.code(finding.code, language="python")
-
-                    if st.button("🩹 Generate secure patch", key=f"genpatch_{i}"):
-                        engine = get_engine(engine_choice)
-                        with st.spinner(f"Generating patch via {engine.name}…"):
-                            try:
-                                patch = engine.generate(
-                                    finding, st.session_state["source_code"]
-                                )
-                                # NOTE: key must NOT collide with a widget key —
-                                # Streamlit reserves widget-key namespaces.
-                                st.session_state[f"patch_result_{i}"] = patch
-                            except Exception as exc:  # demo-day insurance
-                                st.error(f"Patch generation failed: {exc}")
-
-                # Patch result renders OUTSIDE the expander: Streamlit collapses
-                # expanders on rerun (e.g. after the button click), which would
-                # otherwise hide the freshly generated patch from the user.
-                patch = st.session_state.get(f"patch_result_{i}")
-                if patch is not None and hasattr(patch, "engine"):
-                    st.info(
-                        f"🩹 Patch for {finding.rule_id} — generated via *{patch.engine}*"
-                    )
-                    st.markdown("**Explanation**")
-                    st.write(patch.explanation)
-                    if getattr(patch, "attack_scenario", ""):
-                        st.markdown("**Attack scenario**")
-                        st.write(patch.attack_scenario)
-                    if patch.patched_code:
-                        st.markdown("**Patched code**")
-                        st.code(patch.patched_code, language="python")
-                    if patch.diff:
-                        st.markdown("**Unified diff**")
-                        st.code(patch.diff, language="diff")
-                    if getattr(patch, "verify_steps", ""):
-                        st.markdown("**How to verify**")
-                        st.write(patch.verify_steps)
-                    st.caption(
-                        "⚠️ Review every AI suggestion before committing — "
-                        "human-in-the-loop by design."
-                    )
-
-        # ---- AI executive brief + notify -----------------------------------
-        st.divider()
-        st.subheader("🤖 AI Security Brief")
+    if not result.findings:
+        st.success("✅ No known vulnerability patterns detected in this snippet.")
         st.caption(
-            "One-screen prioritised summary for the whole scan — "
-            "generated through the DNotifier AI pipeline."
+            "Note: static heuristics cannot prove absence of bugs — treat a "
+            "clean scan as 'no obvious issues', not a guarantee."
         )
-        if st.button("Generate executive summary", key="btn_brief"):
-            with st.spinner("Asking DNotifier AI for a brief…"):
-                st.session_state["ai_brief"] = get_bridge().security_brief(result)
-        if st.session_state.get("ai_brief"):
-            st.markdown(st.session_state["ai_brief"])
+    else:
+        # ---- Severity chart + findings table ---------------------------
+        st.subheader("Overview")
+        col_chart, col_table = st.columns([1, 2])
 
-        st.divider()
-        if st.button("🔔 Notify team via DNotifier"):
-            status = get_bridge().notify_scan(result)
-            (st.success if status.ok else st.warning)(status.detail)
+        with col_chart:
+            chart_df = pd.DataFrame(
+                {
+                    "Severity": list(counts.keys()),
+                    "Count": list(counts.values()),
+                }
+            ).set_index("Severity")
+            st.bar_chart(chart_df, height=260)
 
-with tab_ask:
-    st.markdown(
-        "Ask anything about secure-coding — answers are grounded in the "
-        "OWASP cheat-sheet seeded into the DNotifier knowledge base."
+        with col_table:
+            table_df = pd.DataFrame(
+                [
+                    {
+                        "Severity": f.severity.value,
+                        "Rule": f.rule_id,
+                        "Title": f.title,
+                        "Line": f.line_no,
+                        "OWASP": f.owasp,
+                    }
+                    for f in result.findings
+                ]
+            )
+            st.dataframe(
+                _severity_table(table_df),
+                use_container_width=True,
+                hide_index=True,
+                height=260,
+            )
+
+        # ---- Per-finding cards (worst first) ---------------------------
+        st.subheader("Findings")
+        ordered = sorted(result.findings, key=lambda f: SEVERITY_RANK[f.severity])
+        for i, finding in enumerate(ordered):
+            color = SEVERITY_COLORS[finding.severity]
+            with st.expander(
+                f"{color} {finding.severity.value} · {finding.rule_id} — "
+                f"{finding.title} (line {finding.line_no})"
+            ):
+                st.markdown(f"**Why dangerous:** {finding.description}")
+                st.markdown(f"**OWASP:** {finding.owasp}")
+                st.code(finding.code, language="python")
+
+                if st.button("🩹 Generate secure patch", key=f"genpatch_{i}"):
+                    engine = get_engine(engine_choice)
+                    with st.spinner(f"Generating patch via {engine.name}…"):
+                        try:
+                            patch = engine.generate(
+                                finding, st.session_state["source_code"]
+                            )
+                            # NOTE: key must NOT collide with a widget key —
+                            # Streamlit reserves widget-key namespaces.
+                            st.session_state[f"patch_result_{i}"] = patch
+                        except Exception as exc:  # demo-day insurance
+                            st.error(f"Patch generation failed: {exc}")
+
+            # Patch result renders OUTSIDE the expander: Streamlit collapses
+            # expanders on rerun (e.g. after the button click), which would
+            # otherwise hide the freshly generated patch from the user.
+            patch = st.session_state.get(f"patch_result_{i}")
+            if patch is not None and hasattr(patch, "engine"):
+                st.info(
+                    f"🩹 Patch for {finding.rule_id} — generated via *{patch.engine}*"
+                )
+                st.markdown("**Explanation**")
+                st.write(patch.explanation)
+                if getattr(patch, "attack_scenario", ""):
+                    st.markdown("**Attack scenario**")
+                    st.write(patch.attack_scenario)
+                if patch.patched_code:
+                    st.markdown("**Patched code**")
+                    st.code(patch.patched_code, language="python")
+                if patch.diff:
+                    st.markdown("**Unified diff**")
+                    st.code(patch.diff, language="diff")
+                if getattr(patch, "verify_steps", ""):
+                    st.markdown("**How to verify**")
+                    st.write(patch.verify_steps)
+                st.caption(
+                    "⚠️ Review every AI suggestion before committing — "
+                    "human-in-the-loop by design."
+                )
+
+    # ---- AI executive brief + notify -----------------------------------
+    st.divider()
+    st.subheader("🤖 AI Security Brief")
+    st.caption(
+        "One-screen prioritised summary for the whole scan — "
+        "generated through the DNotifier AI pipeline."
     )
-    question = st.text_input(
-        "Question",
-        placeholder="e.g. How should I safely hash passwords in Python?",
-    )
-    if st.button("Ask", type="primary") and question.strip():
-        with st.spinner("Thinking…"):
-            answer = get_bridge().ask(question)
-        st.write(answer)
+    if st.button("Generate executive summary", key="btn_brief"):
+        with st.spinner("Asking DNotifier AI for a brief…"):
+            st.session_state["ai_brief"] = get_bridge().security_brief(result)
+    if st.session_state.get("ai_brief"):
+        st.markdown(st.session_state["ai_brief"])
+
+    st.divider()
+    if st.button("🔔 Notify team via DNotifier"):
+        status = get_bridge().notify_scan(result)
+        (st.success if status.ok else st.warning)(status.detail)

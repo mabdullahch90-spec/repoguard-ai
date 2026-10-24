@@ -25,7 +25,7 @@ powering the AI pipeline, the RAG knowledge base, and the messenger.
 |------|--------|--------------|
 | 1. **The Scout** | `repoguard/scanner.py` | 13 deterministic, OWASP-mapped rules — pure text analysis, *no code execution* |
 | 2. **The Explainer / Auto-Patch Engineer** | `repoguard/patcher.py` | AI returns `EXPLANATION → ATTACK SCENARIO → PATCH → VERIFY` with ±12 lines of numbered context |
-| 3. **The Messenger** | `repoguard/notifier.py` | Realtime push (`send`), RAG grounding (`add_document`), AI Q&A + **executive security brief** (`send_ai`) |
+| 3. **The Messenger** | `repoguard/notifier.py` | Realtime push (`send`), RAG grounding (`add_document`), **executive security brief** (`send_ai`) |
 
 Plus:
 
@@ -52,7 +52,6 @@ Then in the browser:
 2. Expand a finding → **🩹 Generate secure patch** → explanation, attack scenario, diff, verify steps
 3. **🤖 Generate executive summary** → prioritised AI brief for the whole scan
 4. **🔔 Notify team via DNotifier** → realtime push with a message ID
-5. Sidebar → **📚 Seed OWASP knowledge base** → ask grounded questions in the *Ask* tab
 
 > 💡 **No DNotifier account?** The app still works: pick *Offline rules only*
 > for deterministic explanations, or point `OPENAI_BASE_URL` at any
@@ -71,7 +70,7 @@ repoguard-ai/
 │   ├── models.py           # Pydantic models (Finding, ScanResult, PatchResult)
 │   ├── scanner.py          # The Scout — static rule engine
 │   ├── patcher.py          # The Auto-Patch Engineer — pluggable AI engines
-│   ├── notifier.py         # DNotifier bridge (notify + RAG + AI Q&A + brief)
+│   ├── notifier.py         # DNotifier bridge (notify + RAG + brief)
 │   └── utils.py            # async bridge, LLM output parsing
 ├── samples/
 │   └── vulnerable_app.py   # demo file with 8 planted vulnerabilities
